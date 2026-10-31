@@ -1,1 +1,18 @@
-{ "historial": [] }
+{
+  "historial": [
+    {
+      "numero": 3,
+      "periodo": "01/10/2026 - 31/10/2026",
+      "programado": "2026-10-31T00:00:00-05:00",
+      "archivo": "Bitacora_003_Octubre_2026.xlsx",
+      "sha256": "1ff1950ffc3da6ec",
+      "destinatarios": [
+        "Miltonchavez740@gmail.com"
+      ],
+      "message_id": "<179342480039.1869.10753606241969512000@bitacoras.local>",
+      "estado": "enviada",
+      "enviado": "2026-10-31T00:33:25-05:00",
+      "error": null
+    }
+  ]
+}
