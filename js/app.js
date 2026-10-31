@@ -262,27 +262,30 @@ function renderTemplateText(tpl, b) {
 
 function render() {
   const next = SCHED.find(b => !b.omitir && !STATE.historial.some(h => h.numero === b.numero && h.estado === "enviada"));
-  $("#auto").textContent = CFG.activo ? "Activa" : "Pausada";
+  $("#auto").textContent = CFG.activo ? "🟢 Automatización activa" : "🔴 Envíos en pausa";
   $("#auto").className = "pill " + (CFG.activo ? "ok" : "bad");
-  $("#next").textContent = next ? `N.º ${pad(next.numero, 3)} · ${next.envio.replace("T", " ")} (Bogotá)` : "Todas enviadas";
+  $("#next").textContent = next
+    ? `Bitácora N.º ${pad(next.numero, 3)} (${MESES[next.mes - 1]} ${next.anio}) · ${next.envio.replace("T", " a las ")}`
+    : "🎉 ¡Todas las bitácoras están enviadas!";
   const miCorreo = (CFG.remitente || CFG.mi_correo || "Miltonchavez740@gmail.com").trim();
-  if ($("#sender")) $("#sender").textContent = miCorreo + (CFG.copia_mi_correo ? " (con copia)" : "");
+  if ($("#sender")) $("#sender").textContent = miCorreo + (CFG.copia_mi_correo ? " (recibe copia)" : "");
   $("#dest").textContent = (CFG.destinatarios || []).join(", ") || "Sin destinatario";
-  $("#subject").textContent = CFG.asunto;
+  $("#subject").textContent = next ? renderTemplateText(CFG.asunto, next) : CFG.asunto;
+  if ($("#hist-count")) $("#hist-count").textContent = String(STATE.historial.filter(h => h.estado === "enviada").length);
 
   $("#rows").innerHTML = SCHED.map(b => {
     const [t, c] = status(b);
-    const badgeAjuste = b.tieneAjuste ? ` <small class="mut" title="Fechas personalizadas">⚙️</small>` : "";
+    const badgeAjuste = b.tieneAjuste ? ` <span class="pill warn" style="padding:1px 6px;font-size:0.7rem;" title="Fechas personalizadas">Ajustada</span>` : "";
     return `<tr>
-      <td><b>${pad(b.numero, 3)}</b>${badgeAjuste}</td>
+      <td><b>Bitácora ${pad(b.numero, 3)}</b>${badgeAjuste}</td>
       <td>${MESES[b.mes - 1]} ${b.anio}</td>
-      <td>${fmt(b.desde)} – ${fmt(b.hasta)}</td>
-      <td>${b.envio.replace("T", " ")}</td>
+      <td>${fmt(b.desde)} al ${fmt(b.hasta)}</td>
+      <td>${b.envio.replace("T", " · ")}</td>
       <td><span class="pill ${c}">${t}</span></td>
       <td>
         <div class="row-actions">
-          <button type="button" class="btn-secondary" data-edit="${b.numero}">✏️ Editar</button>
-          <button type="button" data-n="${b.numero}">⬇️ Excel</button>
+          <button type="button" data-n="${b.numero}">⬇️ Descargar Excel</button>
+          <button type="button" class="btn-secondary" data-edit="${b.numero}">✏️ Ajustar</button>
         </div>
       </td>
     </tr>`;
@@ -290,10 +293,10 @@ function render() {
 
   $("#hist").innerHTML = STATE.historial.length ? STATE.historial.map(h =>
     `<tr>
-      <td><b>${pad(h.numero, 3)}</b></td>
+      <td><b>Bitácora ${pad(h.numero, 3)}</b></td>
       <td>${h.periodo || "—"}</td>
-      <td>${(h.enviado || "—").replace("T", " ")}</td>
-      <td><span class="pill ${h.estado === "enviada" ? "ok" : "bad"}">${h.estado}${h.error ? ": " + h.error : ""}</span></td>
+      <td>${(h.enviado || "—").replace("T", " · ")}</td>
+      <td><span class="pill ${h.estado === "enviada" ? "ok" : "bad"}">${h.estado === "enviada" ? "Enviada con éxito" : "Error"}${h.error ? ": " + h.error : ""}</span></td>
       <td>${(h.destinatarios || []).join(", ")}</td>
     </tr>`
   ).join("") : `<tr><td colspan="5">Aún no hay envíos registrados.</td></tr>`;
@@ -421,7 +424,6 @@ function openOverrideEditor(num) {
   $("#ov-envio").value = b.envio.slice(0, 16);
   $("#ov-estado-hist").value = "keep";
   $("#ov-panel").hidden = false;
-  $("#ov-panel").scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
 async function downloadBitacoraExcel(num) {
@@ -491,14 +493,48 @@ document.addEventListener("click", async e => {
   const btnEdit = e.target.closest("[data-edit]");
   if (btnEdit) {
     openOverrideEditor(Number(btnEdit.dataset.edit));
+    return;
+  }
+  const cfgTabBtn = e.target.closest("[data-cfg-tab]");
+  if (cfgTabBtn) {
+    const target = cfgTabBtn.dataset.cfgTab;
+    document.querySelectorAll("[data-cfg-tab]").forEach(b => b.classList.toggle("active", b === cfgTabBtn));
+    document.querySelectorAll("[data-cfg-pane]").forEach(p => { p.hidden = p.dataset.cfgPane !== target; });
+    return;
+  }
+  const mainTabBtn = e.target.closest("[data-main-tab]");
+  if (mainTabBtn) {
+    const target = mainTabBtn.dataset.mainTab;
+    document.querySelectorAll("[data-main-tab]").forEach(b => b.classList.toggle("active", b === mainTabBtn));
+    $("#pane-cal").hidden = target !== "cal";
+    $("#pane-hist").hidden = target !== "hist";
+    return;
+  }
+  if (e.target.id === "ov-panel") {
+    $("#ov-panel").hidden = true;
+  }
+});
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && !$("#ov-panel").hidden) {
+    $("#ov-panel").hidden = true;
   }
 });
 
 $("#btn-toggle-cfg").addEventListener("click", () => {
   const p = $("#cfg-panel");
   p.hidden = !p.hidden;
-  if (!p.hidden) fillFormFromCfg();
+  if (!p.hidden) {
+    fillFormFromCfg();
+    p.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 });
+
+if ($("#btn-close-cfg")) {
+  $("#btn-close-cfg").addEventListener("click", () => {
+    $("#cfg-panel").hidden = true;
+  });
+}
 
 $("#btn-sync").addEventListener("click", () => loadData(true));
 

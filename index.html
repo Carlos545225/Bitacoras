@@ -3,20 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Panel de bitácoras · Etapa productiva</title>
+<title>Mis Bitácoras · Etapa Productiva</title>
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
 <header>
   <div class="header-inner">
-    <div>
-      <h1>Panel de bitácoras · Etapa productiva</h1>
-      <p>Envío automático con GitHub Actions · Parametrización y control en tiempo real</p>
+    <div class="brand">
+      <div class="brand-icon">📋</div>
+      <div>
+        <h1>Mis Bitácoras · Etapa Productiva</h1>
+        <p>Tus bitácoras se generan y se envían solas cada mes</p>
+      </div>
     </div>
     <div class="header-actions">
       <span id="sync-badge" class="pill info">Sincronizando…</span>
-      <button type="button" id="btn-sync" class="btn-secondary">🔄 Actualizar estado</button>
-      <button type="button" id="btn-toggle-cfg" class="btn-primary">⚙️ Parametrizar / Editar</button>
+      <button type="button" id="btn-sync" class="btn-secondary" title="Actualizar datos">🔄 Actualizar</button>
+      <button type="button" id="btn-toggle-cfg" class="btn-primary">⚙️ Configurar correos y envío</button>
     </div>
   </div>
 </header>
@@ -25,207 +28,282 @@
   <div id="err" hidden></div>
   <div id="toast" hidden></div>
 
-  <div class="cards">
-    <div class="card"><small>Automatización</small><b id="auto">…</b></div>
-    <div class="card"><small>Próximo envío</small><b id="next">…</b></div>
-    <div class="card"><small>Mi correo (remitente)</small><b id="sender">…</b></div>
-    <div class="card"><small>Correo(s) de envío (destino)</small><b id="dest">…</b></div>
-    <div class="card"><small>Asunto</small><b id="subject">…</b></div>
+  <!-- Resumen principal amigable -->
+  <div class="hero-grid">
+    <div class="hero-card">
+      <div>
+        <div class="hero-top">
+          <div>
+            <span class="hero-label">Próxima entrega programada</span>
+            <div class="hero-next-title" id="next">Cargando…</div>
+          </div>
+          <span id="auto" class="pill ok">…</span>
+        </div>
+        <div class="hero-subject">Asunto: <strong id="subject">…</strong></div>
+      </div>
+      <div class="hero-quick-actions">
+        <button type="button" id="btn-run-test" class="btn-secondary" title="Te envía una copia de prueba a tu propio correo sin alterar el historial">🧪 Enviar prueba a mi correo</button>
+        <button type="button" id="btn-run-now" class="btn-secondary" title="Envía inmediatamente las bitácoras vencidas pendientes">🚀 Enviar pendientes ahora</button>
+      </div>
+    </div>
+
+    <div class="cards">
+      <div class="card">
+        <div class="card-icon">📤</div>
+        <div class="card-body">
+          <small>Mi correo (remitente y pruebas)</small>
+          <b id="sender">…</b>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-icon">📥</div>
+        <div class="card-body">
+          <small>Se envía a (destinatario)</small>
+          <b id="dest">…</b>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <!-- Panel de Parametrización editable -->
+  <!-- Panel de Configuración organizado por pasos simples -->
   <section id="cfg-panel" class="cfg-section" hidden>
     <div class="sec-head">
-      <h2>⚙️ Parametrización del sistema</h2>
-      <small class="mut">Los cambios quedan guardados en este navegador y, si conectas tu Token de GitHub, se guardan directamente en el repositorio (<code>data/config.json</code>).</small>
+      <div>
+        <h2>⚙️ Configuración de envíos</h2>
+        <span class="mut">Personaliza tus correos, el mensaje o las fechas en 3 pasos sencillos.</span>
+      </div>
+      <button type="button" id="btn-close-cfg" class="btn-ghost">✕ Cerrar</button>
+    </div>
+
+    <div class="tabs-bar cfg-tabs" role="tablist">
+      <button type="button" class="tab-btn active" data-cfg-tab="correos">📬 1. Correos</button>
+      <button type="button" class="tab-btn" data-cfg-tab="mensaje">✉️ 2. Mensaje y Horario</button>
+      <button type="button" class="tab-btn" data-cfg-tab="conexion">🔐 3. Conexión GitHub</button>
     </div>
 
     <form id="cfg-form" autocomplete="off">
-      <div class="form-grid">
-        <div class="field">
-          <label for="f-activo">Estado del envío automático</label>
-          <select id="f-activo">
-            <option value="true">🟢 Activa (enviar automáticamente)</option>
-            <option value="false">🔴 Pausada (no enviar hasta reactivar)</option>
-          </select>
-        </div>
+      <!-- Pestaña 1: Correos -->
+      <div class="cfg-pane" data-cfg-pane="correos">
+        <div class="form-grid">
+          <div class="field">
+            <label for="f-activo">Envío automático mensual</label>
+            <select id="f-activo">
+              <option value="true">🟢 Activo (enviar automáticamente)</option>
+              <option value="false">🔴 Pausado (no enviar por ahora)</option>
+            </select>
+            <span class="field-hint">Puedes pausarlo cuando quieras y reactivarlo después.</span>
+          </div>
 
-        <div class="field">
-          <label for="f-remitente">Mi correo (remitente y pruebas)</label>
-          <input type="email" id="f-remitente" placeholder="tucorreo@gmail.com" required>
-        </div>
+          <div class="field">
+            <label for="f-remitente">Mi correo personal (remitente)</label>
+            <input type="email" id="f-remitente" placeholder="tucorreo@gmail.com" required>
+            <span class="field-hint">Correo desde el que envías y donde recibes las pruebas.</span>
+          </div>
 
-        <div class="field">
-          <label for="f-dest">Correo(s) de envío / destinatarios (separados por coma)</label>
-          <input type="text" id="f-dest" placeholder="instructor@sena.edu.co, otro@ejemplo.com" required>
-        </div>
+          <div class="field">
+            <label for="f-dest">Correo de envío (a quién le llega la bitácora)</label>
+            <input type="text" id="f-dest" placeholder="instructor@sena.edu.co" required>
+            <span class="field-hint">Si son varios correos, sepáralos con una coma.</span>
+          </div>
 
-        <div class="field">
-          <label for="f-cc">Con copia CC (opcional, separados por coma)</label>
-          <input type="text" id="f-cc" placeholder="copia@ejemplo.com">
-        </div>
+          <div class="field">
+            <label for="f-copia-mi-correo">¿Recibir copia en mi correo?</label>
+            <select id="f-copia-mi-correo">
+              <option value="false">No, enviar solo al destinatario</option>
+              <option value="true">📩 Sí, enviarme una copia en cada entrega</option>
+            </select>
+            <span class="field-hint">Útil para guardar constancia en tu bandeja de entrada.</span>
+          </div>
 
-        <div class="field">
-          <label for="f-copia-mi-correo">Copia automática a mi correo</label>
-          <select id="f-copia-mi-correo">
-            <option value="false">No enviar copia extra a mi correo</option>
-            <option value="true">📩 Sí, enviarme copia en cada envío</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label for="f-hora">Hora programada de envío (Bogotá)</label>
-          <input type="time" id="f-hora" value="00:00" required>
-        </div>
-
-        <div class="field">
-          <label for="f-num-ini">N.º de bitácora inicial</label>
-          <input type="number" id="f-num-ini" min="1" max="999" required>
-        </div>
-
-        <div class="field">
-          <label for="f-anio-ini">Año de inicio</label>
-          <input type="number" id="f-anio-ini" min="2020" max="2100" required>
-        </div>
-
-        <div class="field">
-          <label for="f-mes-ini">Mes de inicio</label>
-          <select id="f-mes-ini">
-            <option value="1">1 - Enero</option>
-            <option value="2">2 - Febrero</option>
-            <option value="3">3 - Marzo</option>
-            <option value="4">4 - Abril</option>
-            <option value="5">5 - Mayo</option>
-            <option value="6">6 - Junio</option>
-            <option value="7">7 - Julio</option>
-            <option value="8">8 - Agosto</option>
-            <option value="9">9 - Septiembre</option>
-            <option value="10">10 - Octubre</option>
-            <option value="11">11 - Noviembre</option>
-            <option value="12">12 - Diciembre</option>
-          </select>
-        </div>
-
-        <div class="field">
-          <label for="f-modo">Duración del calendario</label>
-          <select id="f-modo">
-            <option value="eterno">♾️ Continuo (mes a mes indefinidamente)</option>
-            <option value="fijo">🔢 Cantidad fija de bitácoras</option>
-          </select>
-        </div>
-
-        <div class="field" id="wrap-cantidad" hidden>
-          <label for="f-cantidad">Cantidad total de bitácoras</label>
-          <input type="number" id="f-cantidad" min="1" max="120" value="12">
+          <div class="field">
+            <label for="f-cc">Con copia adicional CC (opcional)</label>
+            <input type="text" id="f-cc" placeholder="coformador@empresa.com">
+            <span class="field-hint">Déjalo vacío si no necesitas enviar copia a nadie más.</span>
+          </div>
         </div>
       </div>
 
-      <div class="field full">
-        <label for="f-asunto">Asunto del correo <small class="mut">(Variables: <code>{numero}</code>, <code>{mes}</code>, <code>{anio}</code>, <code>{desde}</code>, <code>{hasta}</code>)</small></label>
-        <input type="text" id="f-asunto" required>
-      </div>
+      <!-- Pestaña 2: Mensaje y Calendario -->
+      <div class="cfg-pane" data-cfg-pane="mensaje" hidden>
+        <div class="form-grid">
+          <div class="field">
+            <label for="f-hora">Hora de envío (hora Colombia)</label>
+            <input type="time" id="f-hora" value="00:00" required>
+          </div>
 
-      <div class="field full">
-        <label for="f-cuerpo">Cuerpo del correo</label>
-        <textarea id="f-cuerpo" rows="6" required></textarea>
-      </div>
+          <div class="field">
+            <label for="f-num-ini">Empezar desde la bitácora N.º</label>
+            <input type="number" id="f-num-ini" min="1" max="999" required>
+          </div>
 
-      <div class="preview-box">
-        <small>Vista previa del próximo correo:</small>
-        <div id="mail-preview"></div>
-      </div>
+          <div class="field">
+            <label for="f-mes-ini">Mes de inicio</label>
+            <select id="f-mes-ini">
+              <option value="1">Enero</option>
+              <option value="2">Febrero</option>
+              <option value="3">Marzo</option>
+              <option value="4">Abril</option>
+              <option value="5">Mayo</option>
+              <option value="6">Junio</option>
+              <option value="7">Julio</option>
+              <option value="8">Agosto</option>
+              <option value="9">Septiembre</option>
+              <option value="10">Octubre</option>
+              <option value="11">Noviembre</option>
+              <option value="12">Diciembre</option>
+            </select>
+          </div>
 
-      <hr class="sep">
+          <div class="field">
+            <label for="f-anio-ini">Año de inicio</label>
+            <input type="number" id="f-anio-ini" min="2020" max="2100" required>
+          </div>
 
-      <div class="form-grid">
-        <div class="field">
-          <label for="f-repo">Repositorio GitHub (<code>usuario/repo</code>)</label>
-          <input type="text" id="f-repo" placeholder="Carlos545225/Bitacoras">
+          <div class="field">
+            <label for="f-modo">Duración del calendario</label>
+            <select id="f-modo">
+              <option value="eterno">♾️ Continuo (mes a mes sin límite)</option>
+              <option value="fijo">🔢 Cantidad fija de bitácoras</option>
+            </select>
+          </div>
+
+          <div class="field" id="wrap-cantidad" hidden>
+            <label for="f-cantidad">Total de bitácoras a programar</label>
+            <input type="number" id="f-cantidad" min="1" max="120" value="12">
+          </div>
         </div>
-        <div class="field">
-          <label for="f-token">Token de GitHub (opcional, para guardar directo en el repo desde aquí)</label>
-          <input type="password" id="f-token" placeholder="ghp_... o github_pat_...">
-          <small class="mut">Se guarda solo en tu navegador (<code>localStorage</code>). <a href="https://github.com/settings/tokens/new?scopes=repo,workflow&description=Panel+Bitacoras" target="_blank" rel="noopener">Crear token aquí</a>.</small>
+
+        <div class="field full">
+          <label for="f-asunto">Asunto del correo <span class="mut">(puedes usar <code>{numero}</code>, <code>{mes}</code>, <code>{anio}</code>)</span></label>
+          <input type="text" id="f-asunto" required>
         </div>
-        <div class="field">
-          <label for="f-gmail-pass">Contraseña de aplicación Gmail (opcional, si cambias tu correo remitente)</label>
-          <input type="password" id="f-gmail-pass" placeholder="Dejar vacío para conservar la actual (16 letras)">
-          <small class="mut">Si escribes una nueva y tienes tu Token de GitHub activo, actualiza los Secrets <code>GMAIL_USER</code> y <code>GMAIL_APP_PASSWORD</code>. <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">Crear contraseña de aplicación</a>.</small>
+
+        <div class="field full">
+          <label for="f-cuerpo">Mensaje del correo</label>
+          <textarea id="f-cuerpo" rows="5" required></textarea>
+        </div>
+
+        <div class="preview-box">
+          <small>👀 Así se verá el próximo correo que se envíe:</small>
+          <div id="mail-preview"></div>
+        </div>
+      </div>
+
+      <!-- Pestaña 3: Conexión GitHub (Opcional) -->
+      <div class="cfg-pane" data-cfg-pane="conexion" hidden>
+        <div class="form-grid">
+          <div class="field">
+            <label for="f-repo">Repositorio de GitHub</label>
+            <input type="text" id="f-repo" placeholder="Carlos545225/Bitacoras">
+            <span class="field-hint">Nombre de tu repositorio donde corre el sistema.</span>
+          </div>
+
+          <div class="field">
+            <label for="f-token">Token de GitHub (para guardar con 1 clic)</label>
+            <input type="password" id="f-token" placeholder="ghp_... o github_pat_...">
+            <span class="field-hint">Solo se guarda en tu navegador. <a href="https://github.com/settings/tokens/new?scopes=repo,workflow&description=Panel+Bitacoras" target="_blank" rel="noopener">Crear token aquí</a>.</span>
+          </div>
+
+          <div class="field">
+            <label for="f-gmail-pass">Contraseña de aplicación Gmail (opcional)</label>
+            <input type="password" id="f-gmail-pass" placeholder="Dejar vacío para mantener la actual">
+            <span class="field-hint">Úsala solo si cambiaste tu correo remitente. <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">Crear clave de 16 letras</a>.</span>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:8px;">
+          <button type="button" id="btn-export-cfg" class="btn-ghost">⬇️ Descargar archivo config.json</button>
+          <button type="button" id="btn-reset-local" class="btn-ghost">↩️ Recargar datos originales desde GitHub</button>
         </div>
       </div>
 
       <div class="form-actions">
-        <button type="submit" class="btn-primary">💾 Guardar parametrización</button>
-        <button type="button" id="btn-run-now" class="btn-secondary" title="Dispara el workflow en GitHub Actions">🚀 Enviar pendientes ahora</button>
-        <button type="button" id="btn-run-test" class="btn-secondary" title="Envía una prueba a tu propio Gmail">🧪 Enviar prueba a mi correo</button>
-        <button type="button" id="btn-export-cfg" class="btn-ghost">⬇️ Descargar config.json</button>
-        <button type="button" id="btn-reset-local" class="btn-ghost">↩️ Recargar desde GitHub</button>
+        <div class="form-actions-left">
+          <button type="submit" class="btn-primary">💾 Guardar cambios</button>
+        </div>
+        <div class="form-actions-right">
+          <span class="mut">Los cambios se aplican al instante</span>
+        </div>
       </div>
     </form>
   </section>
 
-  <!-- Modal / Cajón para editar una bitácora puntual -->
-  <section id="ov-panel" class="cfg-section" hidden>
-    <div class="sec-head">
-      <h2 id="ov-title">✏️ Ajustar bitácora</h2>
-      <small class="mut">Personaliza las fechas de esta bitácora o corrige su estado de envío.</small>
+  <!-- Modal flotante para editar una bitácora puntual -->
+  <div id="ov-panel" class="modal-backdrop" hidden>
+    <div class="modal-card">
+      <div class="sec-head">
+        <div>
+          <h2 id="ov-title">✏️ Ajustar bitácora</h2>
+          <span class="mut">Cambia las fechas de este mes o marca si ya fue enviada.</span>
+        </div>
+      </div>
+      <form id="ov-form">
+        <input type="hidden" id="ov-num">
+        <div class="form-grid">
+          <div class="field">
+            <label for="ov-desde">Fecha de inicio (Desde)</label>
+            <input type="date" id="ov-desde" required>
+          </div>
+          <div class="field">
+            <label for="ov-hasta">Fecha de fin / entrega (Hasta)</label>
+            <input type="date" id="ov-hasta" required>
+          </div>
+          <div class="field">
+            <label for="ov-envio">Fecha y hora del envío automático</label>
+            <input type="datetime-local" id="ov-envio" required>
+          </div>
+          <div class="field">
+            <label for="ov-estado-hist">Estado de esta bitácora</label>
+            <select id="ov-estado-hist">
+              <option value="keep">Mantener estado actual</option>
+              <option value="enviada">✅ Marcar como ya enviada</option>
+              <option value="pendiente">⏳ Marcar como pendiente (permitir reenvío)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-actions">
+          <div class="form-actions-left">
+            <button type="submit" class="btn-primary">💾 Guardar ajuste</button>
+            <button type="button" id="btn-ov-clear" class="btn-secondary">🔄 Fechas automáticas</button>
+          </div>
+          <div class="form-actions-right">
+            <button type="button" id="btn-ov-cancel" class="btn-ghost">Cancelar</button>
+          </div>
+        </div>
+      </form>
     </div>
-    <form id="ov-form">
-      <input type="hidden" id="ov-num">
-      <div class="form-grid">
-        <div class="field">
-          <label for="ov-desde">Fecha inicio (Desde)</label>
-          <input type="date" id="ov-desde" required>
-        </div>
-        <div class="field">
-          <label for="ov-hasta">Fecha fin / entrega (Hasta)</label>
-          <input type="date" id="ov-hasta" required>
-        </div>
-        <div class="field">
-          <label for="ov-envio">Fecha y hora de envío programado</label>
-          <input type="datetime-local" id="ov-envio" required>
-        </div>
-        <div class="field">
-          <label for="ov-estado-hist">Estado en el historial</label>
-          <select id="ov-estado-hist">
-            <option value="keep">No cambiar historial</option>
-            <option value="enviada">✅ Marcar como Enviada manualmente</option>
-            <option value="pendiente">⏳ Quitar de enviadas (permitir reenvío)</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-actions">
-        <button type="submit" class="btn-primary">💾 Aplicar a esta bitácora</button>
-        <button type="button" id="btn-ov-clear" class="btn-secondary">🔄 Restaurar fechas automáticas</button>
-        <button type="button" id="btn-ov-cancel" class="btn-ghost">Cancelar</button>
-      </div>
-    </form>
-  </section>
+  </div>
 
+  <!-- Calendario e Historial organizados por pestañas limpias -->
   <section>
     <div class="sec-head-row">
-      <h2>Calendario de bitácoras</h2>
-      <small class="mut">Puedes editar las fechas o el estado de cualquier bitácora con el botón <b>✏️ Editar</b>.</small>
+      <div class="tabs-bar" role="tablist">
+        <button type="button" class="tab-btn active" data-main-tab="cal">📅 Calendario de entregas</button>
+        <button type="button" class="tab-btn" data-main-tab="hist">✅ Historial de envíos <span id="hist-count" class="pill ok" style="padding:1px 8px; font-size:0.74rem; margin-left:4px;">0</span></button>
+      </div>
+      <span class="mut">Descarga el Excel de cualquier mes o ajusta sus fechas cuando lo necesites.</span>
     </div>
-    <div class="scroll">
-      <table>
-        <thead>
-          <tr><th>N.º</th><th>Mes</th><th>Periodo</th><th>Envío programado</th><th>Estado</th><th>Acciones</th></tr>
-        </thead>
-        <tbody id="rows"></tbody>
-      </table>
-    </div>
-  </section>
 
-  <section>
-    <h2>Historial de envíos registrados</h2>
-    <div class="scroll">
-      <table>
-        <thead>
-          <tr><th>N.º</th><th>Periodo</th><th>Enviado</th><th>Resultado</th><th>Destinatarios</th></tr>
-        </thead>
-        <tbody id="hist"></tbody>
-      </table>
+    <div id="pane-cal">
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr><th>Bitácora</th><th>Mes</th><th>Periodo reportado</th><th>Envío programado</th><th>Estado</th><th>Acciones</th></tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="pane-hist" hidden>
+      <div class="scroll">
+        <table>
+          <thead>
+            <tr><th>Bitácora</th><th>Periodo</th><th>Fecha de envío</th><th>Estado</th><th>Enviado a</th></tr>
+          </thead>
+          <tbody id="hist"></tbody>
+        </table>
+      </div>
     </div>
   </section>
 </main>
