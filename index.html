@@ -28,7 +28,8 @@
   <div class="cards">
     <div class="card"><small>Automatización</small><b id="auto">…</b></div>
     <div class="card"><small>Próximo envío</small><b id="next">…</b></div>
-    <div class="card"><small>Destinatario(s)</small><b id="dest">…</b></div>
+    <div class="card"><small>Mi correo (remitente)</small><b id="sender">…</b></div>
+    <div class="card"><small>Correo(s) de envío (destino)</small><b id="dest">…</b></div>
     <div class="card"><small>Asunto</small><b id="subject">…</b></div>
   </div>
 
@@ -50,13 +51,26 @@
         </div>
 
         <div class="field">
-          <label for="f-dest">Destinatarios (separados por coma)</label>
-          <input type="text" id="f-dest" placeholder="correo1@ejemplo.com, correo2@ejemplo.com" required>
+          <label for="f-remitente">Mi correo (remitente y pruebas)</label>
+          <input type="email" id="f-remitente" placeholder="tucorreo@gmail.com" required>
+        </div>
+
+        <div class="field">
+          <label for="f-dest">Correo(s) de envío / destinatarios (separados por coma)</label>
+          <input type="text" id="f-dest" placeholder="instructor@sena.edu.co, otro@ejemplo.com" required>
         </div>
 
         <div class="field">
           <label for="f-cc">Con copia CC (opcional, separados por coma)</label>
           <input type="text" id="f-cc" placeholder="copia@ejemplo.com">
+        </div>
+
+        <div class="field">
+          <label for="f-copia-mi-correo">Copia automática a mi correo</label>
+          <select id="f-copia-mi-correo">
+            <option value="false">No enviar copia extra a mi correo</option>
+            <option value="true">📩 Sí, enviarme copia en cada envío</option>
+          </select>
         </div>
 
         <div class="field">
@@ -132,6 +146,11 @@
           <label for="f-token">Token de GitHub (opcional, para guardar directo en el repo desde aquí)</label>
           <input type="password" id="f-token" placeholder="ghp_... o github_pat_...">
           <small class="mut">Se guarda solo en tu navegador (<code>localStorage</code>). <a href="https://github.com/settings/tokens/new?scopes=repo,workflow&description=Panel+Bitacoras" target="_blank" rel="noopener">Crear token aquí</a>.</small>
+        </div>
+        <div class="field">
+          <label for="f-gmail-pass">Contraseña de aplicación Gmail (opcional, si cambias tu correo remitente)</label>
+          <input type="password" id="f-gmail-pass" placeholder="Dejar vacío para conservar la actual (16 letras)">
+          <small class="mut">Si escribes una nueva y tienes tu Token de GitHub activo, actualiza los Secrets <code>GMAIL_USER</code> y <code>GMAIL_APP_PASSWORD</code>. <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">Crear contraseña de aplicación</a>.</small>
         </div>
       </div>
 
@@ -212,6 +231,7 @@
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/libsodium-wrappers@0.7.13/dist/browsers/sodium.js"></script>
 <script src="js/calendar.js"></script>
 <script src="js/excel.js"></script>
 <script src="js/app.js"></script>

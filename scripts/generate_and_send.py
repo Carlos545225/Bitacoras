@@ -79,9 +79,11 @@ def clean_emails(lst):
     return [x.strip() for x in (lst or []) if x and x.strip()]
 
 
-def send_mail(cfg, b, path, to, subject, body, user, pwd, cc):
+def send_mail(cfg, b, path, to, subject, body, user, pwd, cc, reply_to=None):
     msg = EmailMessage()
-    msg["From"], msg["To"], msg["Subject"] = user, ", ".join(to), subject
+    msg["From"], msg["To"], msg["Subject"] = reply_to or user, ", ".join(to), subject
+    if reply_to and reply_to.lower() != user.lower():
+        msg["Reply-To"] = reply_to
     if cc:
         msg["Cc"] = ", ".join(cc)
     mid = make_msgid(domain="bitacoras.local")
@@ -90,11 +92,24 @@ def send_mail(cfg, b, path, to, subject, body, user, pwd, cc):
     msg.add_attachment(path.read_bytes(), maintype="application",
                        subtype="vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename=path.name)
     last = None
+    login_candidates = [reply_to, user] if (reply_to and reply_to.lower() != user.lower()) else [user]
     for wait in (0, 15, 45):  # 3 intentos con espera creciente
         T.sleep(wait)
         try:
             with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ssl.create_default_context(), timeout=60) as s:
-                s.login(user, pwd)
+                logged_in = False
+                last_auth_err = None
+                for cand in login_candidates:
+                    if not cand:
+                        continue
+                    try:
+                        s.login(cand, pwd)
+                        logged_in = True
+                        break
+                    except smtplib.SMTPAuthenticationError as ae:
+                        last_auth_err = ae
+                if not logged_in and last_auth_err:
+                    raise last_auth_err
                 s.send_message(msg)
             return mid
         except smtplib.SMTPAuthenticationError:
@@ -122,11 +137,18 @@ def process(cfg, state, b, dry, test):
     if dry:
         print("DRY RUN: no se envía nada.")
         return True
-    user, pwd = (os.environ.get("GMAIL_USER") or "").strip(), (os.environ.get("GMAIL_APP_PASSWORD") or "").strip()
+    mi_correo = (os.environ.get("REMITENTE") or cfg.get("remitente") or cfg.get("mi_correo") or "").strip()
+    env_user = (os.environ.get("GMAIL_USER") or "").strip()
+    user = env_user or mi_correo
+    pwd = (os.environ.get("GMAIL_APP_PASSWORD") or "").strip()
     if not user or not pwd:
-        raise SystemExit("Faltan los Secrets GMAIL_USER / GMAIL_APP_PASSWORD")
-    to = [user] if test else clean_emails(cfg.get("destinatarios"))
+        raise SystemExit("Faltan las credenciales de correo (GMAIL_USER / GMAIL_APP_PASSWORD)")
+    to = [mi_correo or user] if test else clean_emails(cfg.get("destinatarios"))
     cc = [] if test else clean_emails(cfg.get("cc"))
+    if not test and cfg.get("copia_mi_correo") and (mi_correo or user):
+        own = mi_correo or user
+        if own.lower() not in [x.lower() for x in to + cc]:
+            cc.append(own)
     if not to:
         raise SystemExit("No hay destinatarios configurados en data/config.json")
     subject = ("[PRUEBA] " if test else "") + render(cfg["asunto"], b)
@@ -134,7 +156,7 @@ def process(cfg, state, b, dry, test):
                  programado=b["envio"].isoformat(), archivo=name,
                  sha256=hashlib.sha256(out.read_bytes()).hexdigest()[:16], destinatarios=to)
     try:
-        entry["message_id"] = send_mail(cfg, b, out, to, subject, render(cfg["cuerpo"], b), user, pwd, cc)
+        entry["message_id"] = send_mail(cfg, b, out, to, subject, render(cfg["cuerpo"], b), user, pwd, cc, reply_to=mi_correo or user)
         entry.update(estado="enviada", enviado=datetime.now(TZ).isoformat(timespec="seconds"), error=None)
     except Exception as e:
         entry.update(estado="error", enviado=None, error=str(e)[:300])

@@ -9,6 +9,8 @@ const LS_TOKEN_KEY = "bitacoras_gh_token";
 
 const FALLBACK_CFG = {
   activo: true,
+  remitente: "Miltonchavez740@gmail.com",
+  copia_mi_correo: false,
   destinatarios: ["Miltonchavez740@gmail.com"],
   cc: [],
   asunto: "Bitácora de actividades N.º {numero} - {mes} {anio}",
@@ -126,6 +128,37 @@ async function putGhFile(path, obj, commitMsg) {
   return res.json();
 }
 
+async function putGhSecret(secretName, plainValue) {
+  const repo = getRepo();
+  const token = getToken();
+  if (!repo || !token || !plainValue) return false;
+  if (typeof window.sodium === "undefined") return false;
+  await window.sodium.ready;
+  const s = window.sodium;
+  const keyRes = await fetch(`https://api.github.com/repos/${repo}/actions/secrets/public-key`, {
+    headers: {
+      "Accept": "application/vnd.github.v3+json",
+      "Authorization": `Bearer ${token}`
+    }
+  });
+  if (!keyRes.ok) return false;
+  const { key, key_id } = await keyRes.json();
+  const binKey = s.from_base64(key, s.base64_variants.ORIGINAL);
+  const binSec = s.from_string(plainValue);
+  const encBytes = s.crypto_box_seal(binSec, binKey);
+  const encrypted_value = s.to_base64(encBytes, s.base64_variants.ORIGINAL);
+  const putRes = await fetch(`https://api.github.com/repos/${repo}/actions/secrets/${secretName}`, {
+    method: "PUT",
+    headers: {
+      "Accept": "application/vnd.github.v3+json",
+      "Authorization": `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ encrypted_value, key_id })
+  });
+  return putRes.ok;
+}
+
 async function getLocalJson(p) {
   const r = await fetch(`${p}?t=${Date.now()}`, { cache: "no-store" });
   if (!r.ok) throw new Error(p);
@@ -227,6 +260,8 @@ function render() {
   $("#auto").textContent = CFG.activo ? "Activa" : "Pausada";
   $("#auto").className = "pill " + (CFG.activo ? "ok" : "bad");
   $("#next").textContent = next ? `N.º ${pad(next.numero, 3)} · ${next.envio.replace("T", " ")} (Bogotá)` : "Todas enviadas";
+  const miCorreo = (CFG.remitente || CFG.mi_correo || "Miltonchavez740@gmail.com").trim();
+  if ($("#sender")) $("#sender").textContent = miCorreo + (CFG.copia_mi_correo ? " (con copia)" : "");
   $("#dest").textContent = (CFG.destinatarios || []).join(", ") || "Sin destinatario";
   $("#subject").textContent = CFG.asunto;
 
@@ -265,6 +300,8 @@ function fillFormFromCfg() {
   if (!CFG) return;
   const c = CFG.calendario || {};
   $("#f-activo").value = CFG.activo !== false ? "true" : "false";
+  $("#f-remitente").value = (CFG.remitente || CFG.mi_correo || "Miltonchavez740@gmail.com").trim();
+  $("#f-copia-mi-correo").value = CFG.copia_mi_correo ? "true" : "false";
   $("#f-dest").value = (CFG.destinatarios || []).join(", ");
   $("#f-cc").value = (CFG.cc || []).join(", ");
   $("#f-hora").value = formatHoraEnvio(c.hora_envio);
@@ -285,10 +322,17 @@ function fillFormFromCfg() {
 function updateLivePreview() {
   const sample = SCHED.find(b => !STATE.historial.some(h => h.numero === b.numero && h.estado === "enviada")) || SCHED[0];
   if (!sample) return;
+  const fromMail = ($("#f-remitente") && $("#f-remitente").value.trim()) || CFG.remitente || "Miltonchavez740@gmail.com";
+  const toMail = ($("#f-dest") && $("#f-dest").value.trim()) || (CFG.destinatarios || []).join(", ");
+  const ccRaw = ($("#f-cc") && $("#f-cc").value.trim()) || (CFG.cc || []).join(", ");
+  const wantSelfCopy = $("#f-copia-mi-correo") ? $("#f-copia-mi-correo").value === "true" : !!CFG.copia_mi_correo;
+  const ccList = ccRaw ? ccRaw.split(",").map(s => s.trim()).filter(Boolean) : [];
+  if (wantSelfCopy && fromMail && !ccList.includes(fromMail)) ccList.push(fromMail);
   const subj = renderTemplateText($("#f-asunto") ? $("#f-asunto").value : CFG.asunto, sample);
   const body = renderTemplateText($("#f-cuerpo") ? $("#f-cuerpo").value : CFG.cuerpo, sample);
   const box = $("#mail-preview");
-  if (box) box.textContent = `Asunto: ${subj}\n\n${body}`;
+  const ccLine = ccList.length ? `\nCC: ${ccList.join(", ")}` : "";
+  if (box) box.textContent = `De (mi correo): ${fromMail}\nPara (envío): ${toMail}${ccLine}\nAsunto: ${subj}\n\n${body}`;
 }
 
 function readCfgFromForm() {
@@ -311,6 +355,8 @@ function readCfgFromForm() {
 
   return {
     activo: $("#f-activo").value === "true",
+    remitente: ($("#f-remitente").value || "").trim(),
+    copia_mi_correo: $("#f-copia-mi-correo").value === "true",
     destinatarios: splitEmails($("#f-dest").value),
     cc: splitEmails($("#f-cc").value),
     asunto: $("#f-asunto").value.trim(),
@@ -337,8 +383,18 @@ async function persistAll(commitMessage = "Actualizar parametrización desde el 
       if (saveStateToo) {
         await putGhFile("data/state.json", STATE, commitMessage);
       }
+      const newAppPass = $("#f-gmail-pass") ? $("#f-gmail-pass").value.replace(/\s+/g, "") : "";
+      let secretsMsg = "";
+      if (newAppPass) {
+        if (CFG.remitente) await putGhSecret("GMAIL_USER", CFG.remitente);
+        const okPass = await putGhSecret("GMAIL_APP_PASSWORD", newAppPass);
+        if (okPass) {
+          $("#f-gmail-pass").value = "";
+          secretsMsg = " y se actualizaron tus credenciales GMAIL_USER / GMAIL_APP_PASSWORD en GitHub Secrets";
+        }
+      }
       setSyncBadge("Guardado en GitHub ✓", "ok");
-      showToast("✅ Cambios guardados en tu navegador y sincronizados directamente en GitHub (data/config.json).");
+      showToast(`✅ Cambios guardados en tu navegador y sincronizados directamente en GitHub (data/config.json)${secretsMsg}.`);
       return;
     } catch (err) {
       setSyncBadge("Guardado local (error GitHub)", "warn");
@@ -392,6 +448,7 @@ async function triggerWorkflow(prueba = false) {
     return;
   }
   try {
+    const miCorreo = ($("#f-remitente") && $("#f-remitente").value.trim()) || (CFG && CFG.remitente) || "";
     const res = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/send.yml/dispatches`, {
       method: "POST",
       headers: {
@@ -404,7 +461,8 @@ async function triggerWorkflow(prueba = false) {
         inputs: {
           numero: "",
           dry_run: "false",
-          prueba: prueba ? "true" : "false"
+          prueba: prueba ? "true" : "false",
+          remitente: miCorreo
         }
       })
     });
@@ -443,8 +501,10 @@ $("#f-modo").addEventListener("change", () => {
   $("#wrap-cantidad").hidden = $("#f-modo").value === "eterno";
 });
 
-["#f-asunto", "#f-cuerpo", "#f-num-ini", "#f-anio-ini", "#f-mes-ini"].forEach(sel => {
-  $(sel).addEventListener("input", updateLivePreview);
+["#f-remitente", "#f-copia-mi-correo", "#f-dest", "#f-cc", "#f-asunto", "#f-cuerpo", "#f-num-ini", "#f-anio-ini", "#f-mes-ini"].forEach(sel => {
+  const el = $(sel);
+  if (el) el.addEventListener("input", updateLivePreview);
+  if (el) el.addEventListener("change", updateLivePreview);
 });
 
 $("#cfg-form").addEventListener("submit", async e => {

@@ -12,6 +12,7 @@ on:
       numero: { description: "Número de bitácora (vacío = las pendientes)", required: false }
       dry_run: { description: "Solo generar y validar, sin enviar", type: boolean, default: false }
       prueba: { description: "Enviar de prueba a tu propio correo (no se registra)", type: boolean, default: false }
+      remitente: { description: "Tu correo (remitente / receptor de prueba)", required: false }
 permissions:
   contents: write
   actions: write
@@ -35,6 +36,7 @@ jobs:
           NUMERO: ${{ github.event.inputs.numero }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
           PRUEBA: ${{ github.event.inputs.prueba || 'false' }}
+          REMITENTE: ${{ github.event.inputs.remitente }}
         run: python scripts/generate_and_send.py
       - name: Guardar historial (siempre, para no duplicar)
         if: always() && github.event.inputs.dry_run != 'true' && github.event.inputs.prueba != 'true'
