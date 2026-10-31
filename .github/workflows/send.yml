@@ -1,12 +1,7 @@
 name: Enviar bitacora
 on:
   schedule:
-    - cron: "5 5 * * *"    # 00:05 Bogotá (12:05 AM medianoche)
-    - cron: "37 5 * * *"   # 00:37 Bogotá (12:37 AM respaldo madrugada 1)
-    - cron: "23 6 * * *"   # 01:23 Bogotá (01:23 AM respaldo madrugada 2)
-    - cron: "17 11 * * *"  # 06:17 Bogotá (06:17 AM respaldo mañana)
-    - cron: "5 17 * * *"   # 12:05 Bogotá (12:05 PM mediodía - respaldo)
-    - cron: "17 23 * * *"  # 18:17 Bogotá (06:17 PM tarde - respaldo)
+    - cron: "*/5 * * * *"  # Revisa cada 5 minutos si hay bitácoras cuya hora programada ya llegó
   workflow_dispatch:
     inputs:
       numero: { description: "Número de bitácora (vacío = las pendientes)", required: false }

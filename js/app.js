@@ -26,20 +26,7 @@ const FALLBACK_CFG = {
 };
 
 const FALLBACK_STATE = {
-  historial: [
-    {
-      numero: 3,
-      periodo: "01/10/2026 - 31/10/2026",
-      programado: "2026-10-31T00:00:00-05:00",
-      archivo: "Bitacora_003_Octubre_2026.xlsx",
-      sha256: "1ff1950ffc3da6ec",
-      destinatarios: ["Miltonchavez740@gmail.com"],
-      message_id: "<179342480039.1869.10753606241969512000@bitacoras.local>",
-      estado: "enviada",
-      enviado: "2026-10-31T00:33:25-05:00",
-      error: null
-    }
-  ]
+  historial: []
 };
 
 let CFG = null, STATE = null, SCHED = [];
@@ -259,27 +246,24 @@ async function loadData(preferRemote = false) {
   try { lsCfg = JSON.parse(localStorage.getItem(LS_CFG_KEY) || "null"); } catch (_) {}
   try { lsState = JSON.parse(localStorage.getItem(LS_STATE_KEY) || "null"); } catch (_) {}
 
-  if (preferRemote && remoteCfg) {
+  if (remoteCfg) {
     CFG = remoteCfg;
     localStorage.setItem(LS_CFG_KEY, JSON.stringify(CFG));
+  } else if (preferRemote && localCfg) {
+    CFG = localCfg;
+    localStorage.setItem(LS_CFG_KEY, JSON.stringify(CFG));
   } else {
-    CFG = lsCfg || remoteCfg || localCfg || structuredClone(FALLBACK_CFG);
+    CFG = lsCfg || localCfg || structuredClone(FALLBACK_CFG);
   }
 
-  const mergedHist = mergeHistories(
-    FALLBACK_STATE.historial,
-    mergeHistories(
-      (localState && localState.historial) || [],
-      mergeHistories(
-        (lsState && lsState.historial) || [],
-        (remoteState && remoteState.historial) || []
-      )
-    )
-  );
-  if (preferRemote && remoteState && Array.isArray(remoteState.historial)) {
-    STATE = { historial: mergeHistories(remoteState.historial, (localState && localState.historial) || []) };
+  if (remoteState && Array.isArray(remoteState.historial)) {
+    STATE = { historial: remoteState.historial };
+  } else if (localState && Array.isArray(localState.historial)) {
+    STATE = { historial: localState.historial };
+  } else if (lsState && Array.isArray(lsState.historial)) {
+    STATE = { historial: lsState.historial };
   } else {
-    STATE = { historial: mergedHist };
+    STATE = { historial: [] };
   }
   localStorage.setItem(LS_STATE_KEY, JSON.stringify(STATE));
 
@@ -506,12 +490,13 @@ async function persistAll(commitMessage = "Actualizar parametrización desde el 
 function openOverrideEditor(num) {
   const b = SCHED.find(x => x.numero === num);
   if (!b) return;
+  const isEnviada = STATE && Array.isArray(STATE.historial) && STATE.historial.some(h => h.numero === num && h.estado === "enviada");
   $("#ov-num").value = String(b.numero);
   $("#ov-title").textContent = `✏️ Ajustar Bitácora N.º ${pad(b.numero, 3)} (${MESES[b.mes - 1]} ${b.anio})`;
   $("#ov-desde").value = `${b.desde.y}-${pad(b.desde.m)}-${pad(b.desde.d)}`;
   $("#ov-hasta").value = `${b.hasta.y}-${pad(b.hasta.m)}-${pad(b.hasta.d)}`;
   $("#ov-envio").value = b.envio.slice(0, 16);
-  $("#ov-estado-hist").value = "keep";
+  $("#ov-estado-hist").value = isEnviada ? "enviada" : "pendiente";
   $("#ov-panel").hidden = false;
 }
 
@@ -535,12 +520,16 @@ async function downloadBitacoraExcel(num) {
   a.click();
 }
 
-async function triggerWorkflow(prueba = false) {
+let lastAutoDispatchAt = 0;
+
+async function triggerWorkflow(prueba = false, isAuto = false) {
   const repo = getRepo();
   const token = getToken();
   if (!token) {
-    window.open(`https://github.com/${repo}/actions/workflows/send.yml`, "_blank");
-    showToast("Se abrió GitHub Actions en otra pestaña. (Si configuras tu Token de GitHub en Parametrización, podrás dispararlo con 1 clic sin salir de aquí).");
+    if (!isAuto) {
+      window.open(`https://github.com/${repo}/actions/workflows/send.yml`, "_blank");
+      showToast("Se abrió GitHub Actions en otra pestaña. (Si configuras tu Token de GitHub en Configuración, podrás dispararlo con 1 clic sin salir de aquí).");
+    }
     return;
   }
   try {
@@ -565,10 +554,29 @@ async function triggerWorkflow(prueba = false) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     showToast(prueba
       ? "🧪 Envío de prueba disparado en GitHub Actions. Revisa tu bandeja en ~30 segundos."
-      : "🚀 Envío real disparado en GitHub Actions. En ~30 segundos se actualizará el estado.");
-    setTimeout(() => loadData(true), 25000);
+      : (isAuto
+        ? "⏰ Hora programada alcanzada: enviando bitácora automáticamente en GitHub Actions (~30 s)…"
+        : "🚀 Envío real disparado en GitHub Actions. En ~30 segundos se actualizará el estado."));
+    setTimeout(() => loadData(true), 20000);
+    setTimeout(() => loadData(true), 40000);
   } catch (err) {
-    showToast(`No se pudo disparar el workflow: ${err.message}`, true);
+    if (!isAuto) showToast(`No se pudo disparar el workflow: ${err.message}`, true);
+  }
+}
+
+async function checkDueAndAutoSend() {
+  if (!CFG || !CFG.activo || !STATE || !Array.isArray(SCHED)) return;
+  const now = new Date();
+  const due = SCHED.find(b =>
+    !b.omitir &&
+    !STATE.historial.some(h => h.numero === b.numero && h.estado === "enviada") &&
+    new Date(b.envio + "-05:00") <= now
+  );
+  if (!due) return;
+  render();
+  if (getToken() && Date.now() - lastAutoDispatchAt > 90000) {
+    lastAutoDispatchAt = Date.now();
+    await triggerWorkflow(false, true);
   }
 }
 
@@ -674,6 +682,12 @@ $("#btn-reset-local").addEventListener("click", async () => {
 $("#btn-run-now").addEventListener("click", () => triggerWorkflow(false));
 $("#btn-run-test").addEventListener("click", () => triggerWorkflow(true));
 
+if ($("#ov-envio")) {
+  $("#ov-envio").addEventListener("input", () => {
+    if ($("#ov-estado-hist")) $("#ov-estado-hist").value = "pendiente";
+  });
+}
+
 $("#ov-form").addEventListener("submit", async e => {
   e.preventDefault();
   const num = Number($("#ov-num").value);
@@ -685,7 +699,7 @@ $("#ov-form").addEventListener("submit", async e => {
     envio: $("#ov-envio").value
   };
   const histAction = $("#ov-estado-hist").value;
-  let saveStateToo = false;
+  let saveStateToo = true;
   if (histAction === "enviada") {
     const b = buildSchedule(CFG).find(x => x.numero === num);
     const entry = {
@@ -701,13 +715,12 @@ $("#ov-form").addEventListener("submit", async e => {
       error: null
     };
     STATE.historial = STATE.historial.filter(h => h.numero !== num).concat([entry]).sort((a, b) => a.numero - b.numero);
-    saveStateToo = true;
-  } else if (histAction === "pendiente") {
+  } else {
     STATE.historial = STATE.historial.filter(h => h.numero !== num);
-    saveStateToo = true;
   }
   $("#ov-panel").hidden = true;
   await persistAll(`Ajustar bitácora ${key} desde el panel`, saveStateToo);
+  setTimeout(checkDueAndAutoSend, 1500);
 });
 
 $("#btn-ov-clear").addEventListener("click", async () => {
@@ -725,4 +738,5 @@ $("#btn-ov-cancel").addEventListener("click", () => {
   $("#ov-panel").hidden = true;
 });
 
-loadData(false);
+loadData(true);
+setInterval(checkDueAndAutoSend, 15000);
