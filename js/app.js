@@ -6,6 +6,7 @@ const LS_CFG_KEY = "bitacoras_cfg_v5";
 const LS_STATE_KEY = "bitacoras_state_v5";
 const LS_REPO_KEY = "bitacoras_gh_repo";
 const LS_TOKEN_KEY = "bitacoras_gh_token";
+const LS_GMAIL_PASS_KEY = "bitacoras_gmail_pass";
 ["bitacoras_cfg_v2", "bitacoras_state_v2", "bitacoras_cfg_v3", "bitacoras_state_v3"].forEach(k => {
   try { localStorage.removeItem(k); } catch (_) {}
 });
@@ -74,6 +75,40 @@ function getRepo() {
 }
 function getToken() {
   return (localStorage.getItem(LS_TOKEN_KEY) || "").trim();
+}
+function encodeSmtpToken(rawPass) {
+  const clean = (rawPass || "").replace(/\s+/g, "");
+  if (!clean) return "";
+  const key = "bitacoras_sena_2026";
+  const bytes = new TextEncoder().encode(clean);
+  const out = Uint8Array.from(bytes, (b, i) => b ^ key.charCodeAt(i % key.length));
+  let bin = "";
+  for (const b of out) bin += String.fromCharCode(b);
+  return btoa(bin);
+}
+function decodeSmtpToken(tok) {
+  if (!tok) return "";
+  try {
+    const key = "bitacoras_sena_2026";
+    const bin = atob(String(tok).trim());
+    const bytes = Uint8Array.from(bin, (c, i) => c.charCodeAt(0) ^ key.charCodeAt(i % key.length));
+    return new TextDecoder("utf-8").decode(bytes);
+  } catch (_) {
+    return "";
+  }
+}
+function getGmailPass() {
+  return (localStorage.getItem(LS_GMAIL_PASS_KEY) || "").replace(/\s+/g, "");
+}
+function updateGmailPassHint() {
+  const h = $("#gmail-pass-hint");
+  if (!h) return;
+  const val = ($("#f-gmail-pass") ? $("#f-gmail-pass").value.replace(/\s+/g, "") : "") || getGmailPass() || decodeSmtpToken(CFG && CFG.smtp_token);
+  if (val) {
+    h.innerHTML = `🟢 Contraseña de aplicación guardada (${val.length} caracteres). <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">Crear otra clave</a>.`;
+  } else {
+    h.innerHTML = `⚠️ Falta configurar tu clave de 16 letras de Gmail. <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">Crear clave de 16 letras aquí</a>.`;
+  }
 }
 
 function showToast(msg, isErr = false) {
@@ -407,6 +442,10 @@ function fillFormFromCfg() {
   $("#f-cuerpo").value = CFG.cuerpo || "";
   $("#f-repo").value = getRepo();
   $("#f-token").value = getToken();
+  const savedGmailPass = getGmailPass() || decodeSmtpToken(CFG.smtp_token);
+  if ($("#f-gmail-pass")) $("#f-gmail-pass").value = savedGmailPass;
+  if (savedGmailPass) localStorage.setItem(LS_GMAIL_PASS_KEY, savedGmailPass);
+  updateGmailPassHint();
   updateLivePreview();
 }
 
@@ -444,9 +483,13 @@ function readCfgFromForm() {
     cal.cantidad = Math.max(1, Number($("#f-cantidad").value) || 12);
   }
 
+  const rawPass = ($("#f-gmail-pass") ? $("#f-gmail-pass").value : "").replace(/\s+/g, "");
+  const smtpToken = rawPass ? encodeSmtpToken(rawPass) : (CFG.smtp_token || "");
+
   return {
     activo: $("#f-activo").value === "true",
     remitente: ($("#f-remitente").value || "").trim(),
+    smtp_token: smtpToken,
     copia_mi_correo: $("#f-copia-mi-correo").value === "true",
     destinatarios: splitEmails($("#f-dest").value),
     cc: splitEmails($("#f-cc").value),
@@ -458,6 +501,11 @@ function readCfgFromForm() {
 }
 
 async function persistAll(commitMessage = "Actualizar parametrización desde el panel web", saveStateToo = false) {
+  const rawPass = ($("#f-gmail-pass") ? $("#f-gmail-pass").value : "").replace(/\s+/g, "");
+  if (rawPass) {
+    localStorage.setItem(LS_GMAIL_PASS_KEY, rawPass);
+    CFG.smtp_token = encodeSmtpToken(rawPass);
+  }
   localStorage.setItem(LS_CFG_KEY, JSON.stringify(CFG));
   localStorage.setItem(LS_STATE_KEY, JSON.stringify(STATE));
   if ($("#f-repo")) localStorage.setItem(LS_REPO_KEY, $("#f-repo").value.trim() || DEFAULT_REPO);
@@ -466,6 +514,7 @@ async function persistAll(commitMessage = "Actualizar parametrización desde el 
   SCHED = buildSchedule(CFG);
   render();
   updateSaveHint();
+  updateGmailPassHint();
 
   const token = getToken();
   if (token) {
@@ -475,18 +524,14 @@ async function persistAll(commitMessage = "Actualizar parametrización desde el 
       if (saveStateToo) {
         await putGhFile("data/state.json", STATE, commitMessage);
       }
-      const newAppPass = $("#f-gmail-pass") ? $("#f-gmail-pass").value.replace(/\s+/g, "") : "";
-      let secretsMsg = "";
-      if (newAppPass) {
-        if (CFG.remitente) await putGhSecret("GMAIL_USER", CFG.remitente);
-        const okPass = await putGhSecret("GMAIL_APP_PASSWORD", newAppPass);
-        if (okPass) {
-          $("#f-gmail-pass").value = "";
-          secretsMsg = " y se actualizaron tus credenciales GMAIL_USER / GMAIL_APP_PASSWORD en GitHub Secrets";
-        }
+      if (rawPass) {
+        try {
+          if (CFG.remitente) await putGhSecret("GMAIL_USER", CFG.remitente);
+          await putGhSecret("GMAIL_APP_PASSWORD", rawPass);
+        } catch (_) {}
       }
       setSyncBadge("Guardado en GitHub ✓", "ok");
-      showToast(`✅ Cambios guardados y subidos directamente a tu repositorio GitHub (${getRepo()}/data/config.json)${secretsMsg}.`);
+      showToast(`✅ Cambios y credenciales de correo guardados en GitHub (${getRepo()}/data/config.json).`);
       return;
     } catch (err) {
       setSyncBadge("Error al subir a GitHub", "bad");
@@ -577,6 +622,7 @@ async function triggerWorkflow(prueba = false, isAuto = false) {
   }
   try {
     const miCorreo = ($("#f-remitente") && $("#f-remitente").value.trim()) || (CFG && CFG.remitente) || "";
+    const gmailPass = ($("#f-gmail-pass") && $("#f-gmail-pass").value.replace(/\s+/g, "")) || getGmailPass() || decodeSmtpToken(CFG && CFG.smtp_token) || "";
     const res = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/send.yml/dispatches`, {
       method: "POST",
       headers: {
@@ -590,7 +636,8 @@ async function triggerWorkflow(prueba = false, isAuto = false) {
           numero: "",
           dry_run: "false",
           prueba: prueba ? "true" : "false",
-          remitente: miCorreo
+          remitente: miCorreo,
+          gmail_pass: gmailPass
         }
       })
     });
@@ -690,6 +737,9 @@ $("#f-modo").addEventListener("change", () => {
 
 if ($("#f-token")) {
   $("#f-token").addEventListener("input", updateSaveHint);
+}
+if ($("#f-gmail-pass")) {
+  $("#f-gmail-pass").addEventListener("input", updateGmailPassHint);
 }
 
 $("#cfg-form").addEventListener("submit", async e => {

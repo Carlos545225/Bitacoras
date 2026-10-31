@@ -79,6 +79,18 @@ def clean_emails(lst):
     return [x.strip() for x in (lst or []) if x and x.strip()]
 
 
+def decode_smtp_token(tok):
+    if not tok:
+        return ""
+    try:
+        import base64
+        key = b"bitacoras_sena_2026"
+        raw = base64.b64decode(str(tok).strip())
+        return bytes(b ^ key[i % len(key)] for i, b in enumerate(raw)).decode("utf-8")
+    except Exception:
+        return ""
+
+
 def send_mail(cfg, b, path, to, subject, body, user, pwd, cc, reply_to=None):
     msg = EmailMessage()
     msg["From"], msg["To"], msg["Subject"] = reply_to or user, ", ".join(to), subject
@@ -139,10 +151,14 @@ def process(cfg, state, b, dry, test):
         return True
     mi_correo = (os.environ.get("REMITENTE") or cfg.get("remitente") or cfg.get("mi_correo") or "").strip()
     env_user = (os.environ.get("GMAIL_USER") or "").strip()
-    user = env_user or mi_correo
-    pwd = (os.environ.get("GMAIL_APP_PASSWORD") or "").strip()
+    user = mi_correo or env_user
+    pwd = (
+        (os.environ.get("GMAIL_PASS_INPUT") or "").replace(" ", "").strip()
+        or decode_smtp_token(cfg.get("smtp_token"))
+        or (os.environ.get("GMAIL_APP_PASSWORD") or "").replace(" ", "").strip()
+    )
     if not user or not pwd:
-        raise SystemExit("Faltan las credenciales de correo (GMAIL_USER / GMAIL_APP_PASSWORD)")
+        raise SystemExit("Faltan las credenciales de correo: configura tu correo y Contraseña de aplicación Gmail en el panel web.")
     to = [mi_correo or user] if test else clean_emails(cfg.get("destinatarios"))
     cc = [] if test else clean_emails(cfg.get("cc"))
     if not test and cfg.get("copia_mi_correo") and (mi_correo or user):
