@@ -38,7 +38,7 @@ jobs:
         run: |
           git config user.name "bitacora-bot"
           git config user.email "bitacora-bot@users.noreply.github.com"
-          git add data/state.json generated
+          git add data/state.json data/config.json generated
           if ! git diff --cached --quiet; then
             git commit -m "Historial de envíos"
             for i in 1 2 3 4; do

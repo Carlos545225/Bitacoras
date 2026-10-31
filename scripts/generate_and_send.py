@@ -163,8 +163,21 @@ def process(cfg, state, b, dry, test):
     if not test:  # las pruebas no se registran, para no bloquear el envío real
         state["historial"] = [h for h in state.get("historial", []) if h.get("numero") != b["numero"]] + [entry]
         save_state(state)
+        if entry["estado"] == "enviada" and isinstance(cfg.get("ajustes"), dict):
+            for k in (f"{b['numero']:03d}", str(b["numero"])):
+                if k in cfg["ajustes"] and isinstance(cfg["ajustes"][k], dict):
+                    cfg["ajustes"][k]["estado"] = "enviada"
+            (ROOT / "data/config.json").write_text(json.dumps(cfg, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"Bitácora {b['numero']:03d}: {entry['estado']}" + (f" - {entry['error']}" if entry["error"] else ""))
     return entry["estado"] == "enviada"
+
+
+def is_already_sent(b, state, cfg):
+    ajustes = cfg.get("ajustes") or {}
+    ov = ajustes.get(f"{b['numero']:03d}") or ajustes.get(str(b["numero"])) or {}
+    if ov.get("estado") == "pendiente":
+        return False
+    return any(h.get("numero") == b["numero"] and h.get("estado") == "enviada" for h in state.get("historial", []))
 
 
 def main():
@@ -183,16 +196,15 @@ def main():
     if not a.dry_run and not a.prueba and (not dests or any("EJEMPLO" in x.upper() for x in dests)):
         raise SystemExit("Edita data/config.json: falta el correo del destinatario.")
     sched = schedule(cfg, target_num=a.numero)
-    enviadas = {h["numero"] for h in state["historial"] if h.get("estado") == "enviada"}
     if a.numero:
         todo = [b for b in sched if b["numero"] == a.numero]
         if not todo:
             raise SystemExit(f"La bitácora {a.numero} no está en el calendario")
-        if a.numero in enviadas and not (a.dry_run or a.prueba):
+        if is_already_sent(todo[0], state, cfg) and not (a.dry_run or a.prueba):
             return print(f"La bitácora {a.numero:03d} ya fue enviada; no se repite.")
     else:
         now = datetime.now(TZ)
-        todo = [b for b in sched if b["numero"] not in enviadas and not b.get("omitir") and b["envio"] <= now]
+        todo = [b for b in sched if not is_already_sent(b, state, cfg) and not b.get("omitir") and b["envio"] <= now]
     if not todo:
         return print("Nada pendiente por enviar hoy.")
     for b in todo:

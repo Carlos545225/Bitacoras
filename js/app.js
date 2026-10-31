@@ -2,10 +2,13 @@ const $ = s => document.querySelector(s);
 const fileName = b => `Bitacora_${pad(b.numero, 3)}_${MESES[b.mes - 1]}_${b.anio}.xlsx`;
 
 const DEFAULT_REPO = "Carlos545225/Bitacoras";
-const LS_CFG_KEY = "bitacoras_cfg_v2";
-const LS_STATE_KEY = "bitacoras_state_v2";
+const LS_CFG_KEY = "bitacoras_cfg_v5";
+const LS_STATE_KEY = "bitacoras_state_v5";
 const LS_REPO_KEY = "bitacoras_gh_repo";
 const LS_TOKEN_KEY = "bitacoras_gh_token";
+["bitacoras_cfg_v2", "bitacoras_state_v2", "bitacoras_cfg_v3", "bitacoras_state_v3"].forEach(k => {
+  try { localStorage.removeItem(k); } catch (_) {}
+});
 
 const FALLBACK_CFG = {
   activo: true,
@@ -106,12 +109,11 @@ async function fetchGhFile(path) {
   const repo = getRepo();
   if (!repo) throw new Error("Sin repo");
   const headers = {
-    "Accept": "application/vnd.github.v3+json",
-    "If-None-Match": ""
+    "Accept": "application/vnd.github.v3+json"
   };
   const token = getToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`https://api.github.com/repos/${repo}/contents/${path}?ref=main`, {
+  const res = await fetch(`https://api.github.com/repos/${repo}/contents/${path}?ref=main&_=${Date.now()}`, {
     headers,
     cache: "no-store"
   });
@@ -278,14 +280,51 @@ async function loadData(preferRemote = false) {
   }
 
   SCHED = buildSchedule(CFG);
+  if (STATE && Array.isArray(STATE.historial)) {
+    STATE.historial = STATE.historial.filter(h => {
+      const ov = getOverride(h.numero);
+      if (ov && ov.estado === "pendiente") {
+        const b = SCHED.find(x => x.numero === h.numero);
+        if (!h.enviado || !b || new Date(h.enviado) < new Date(b.envio + "-05:00")) {
+          return false;
+        }
+      }
+      return true;
+    });
+    localStorage.setItem(LS_STATE_KEY, JSON.stringify(STATE));
+  }
   render();
   fillFormFromCfg();
   updateSaveHint();
 }
 
+function getOverride(num) {
+  if (!CFG || !CFG.ajustes) return null;
+  return CFG.ajustes[pad(num, 3)] || CFG.ajustes[String(num)] || null;
+}
+
+function isBitacoraEnviada(b) {
+  const ov = getOverride(b.numero);
+  const h = STATE && Array.isArray(STATE.historial)
+    ? STATE.historial.find(x => x.numero === b.numero && x.estado === "enviada")
+    : null;
+  if (!h) return false;
+  if (ov && ov.estado === "pendiente") {
+    if (h.enviado && b.envio && new Date(h.enviado) >= new Date(b.envio + "-05:00")) {
+      return true;
+    }
+    return false;
+  }
+  return true;
+}
+
 function status(b) {
-  const h = STATE.historial.find(x => x.numero === b.numero);
-  if (h) return h.estado === "enviada" ? ["Enviada", "ok"] : ["Error", "bad"];
+  if (isBitacoraEnviada(b)) return ["Enviada", "ok"];
+  const hErr = STATE && Array.isArray(STATE.historial)
+    ? STATE.historial.find(x => x.numero === b.numero && x.estado !== "enviada")
+    : null;
+  const ov = getOverride(b.numero);
+  if (hErr && (!ov || ov.estado !== "pendiente")) return ["Error", "bad"];
   if (b.omitir) return ["Omitida", "warn"];
   return new Date(b.envio + "-05:00") <= new Date() ? ["Pendiente (se envía hoy)", "warn"] : ["Programada", "info"];
 }
@@ -301,7 +340,7 @@ function renderTemplateText(tpl, b) {
 }
 
 function render() {
-  const next = SCHED.find(b => !b.omitir && !STATE.historial.some(h => h.numero === b.numero && h.estado === "enviada"));
+  const next = SCHED.find(b => !b.omitir && !isBitacoraEnviada(b));
   $("#auto").textContent = CFG.activo ? "🟢 Automatización activa" : "🔴 Envíos en pausa";
   $("#auto").className = "pill " + (CFG.activo ? "ok" : "bad");
   $("#next").textContent = next
@@ -311,7 +350,11 @@ function render() {
   if ($("#sender")) $("#sender").textContent = miCorreo + (CFG.copia_mi_correo ? " (recibe copia)" : "");
   $("#dest").textContent = (CFG.destinatarios || []).join(", ") || "Sin destinatario";
   $("#subject").textContent = next ? renderTemplateText(CFG.asunto, next) : CFG.asunto;
-  if ($("#hist-count")) $("#hist-count").textContent = String(STATE.historial.filter(h => h.estado === "enviada").length);
+  const validHist = STATE.historial.filter(h => {
+    const b = SCHED.find(x => x.numero === h.numero);
+    return b ? isBitacoraEnviada(b) || h.estado !== "enviada" : true;
+  });
+  if ($("#hist-count")) $("#hist-count").textContent = String(validHist.filter(h => h.estado === "enviada").length);
 
   $("#rows").innerHTML = SCHED.map(b => {
     const [t, c] = status(b);
@@ -331,7 +374,7 @@ function render() {
     </tr>`;
   }).join("");
 
-  $("#hist").innerHTML = STATE.historial.length ? STATE.historial.map(h =>
+  $("#hist").innerHTML = validHist.length ? validHist.map(h =>
     `<tr>
       <td><b>Bitácora ${pad(h.numero, 3)}</b></td>
       <td>${h.periodo || "—"}</td>
@@ -490,7 +533,7 @@ async function persistAll(commitMessage = "Actualizar parametrización desde el 
 function openOverrideEditor(num) {
   const b = SCHED.find(x => x.numero === num);
   if (!b) return;
-  const isEnviada = STATE && Array.isArray(STATE.historial) && STATE.historial.some(h => h.numero === num && h.estado === "enviada");
+  const isEnviada = isBitacoraEnviada(b);
   $("#ov-num").value = String(b.numero);
   $("#ov-title").textContent = `✏️ Ajustar Bitácora N.º ${pad(b.numero, 3)} (${MESES[b.mes - 1]} ${b.anio})`;
   $("#ov-desde").value = `${b.desde.y}-${pad(b.desde.m)}-${pad(b.desde.d)}`;
@@ -569,7 +612,7 @@ async function checkDueAndAutoSend() {
   const now = new Date();
   const due = SCHED.find(b =>
     !b.omitir &&
-    !STATE.historial.some(h => h.numero === b.numero && h.estado === "enviada") &&
+    !isBitacoraEnviada(b) &&
     new Date(b.envio + "-05:00") <= now
   );
   if (!due) return;
@@ -692,13 +735,14 @@ $("#ov-form").addEventListener("submit", async e => {
   e.preventDefault();
   const num = Number($("#ov-num").value);
   const key = pad(num, 3);
+  const histAction = $("#ov-estado-hist").value;
   CFG.ajustes = CFG.ajustes || {};
   CFG.ajustes[key] = {
     desde: $("#ov-desde").value,
     hasta: $("#ov-hasta").value,
-    envio: $("#ov-envio").value
+    envio: $("#ov-envio").value,
+    estado: histAction === "enviada" ? "enviada" : "pendiente"
   };
-  const histAction = $("#ov-estado-hist").value;
   let saveStateToo = true;
   if (histAction === "enviada") {
     const b = buildSchedule(CFG).find(x => x.numero === num);
