@@ -2,7 +2,11 @@ name: Enviar bitacora
 on:
   schedule:
     - cron: "5 5 * * *"    # 00:05 Bogotá (12:05 AM medianoche)
+    - cron: "37 5 * * *"   # 00:37 Bogotá (12:37 AM respaldo madrugada 1)
+    - cron: "23 6 * * *"   # 01:23 Bogotá (01:23 AM respaldo madrugada 2)
+    - cron: "17 11 * * *"  # 06:17 Bogotá (06:17 AM respaldo mañana)
     - cron: "5 17 * * *"   # 12:05 Bogotá (12:05 PM mediodía - respaldo)
+    - cron: "17 23 * * *"  # 18:17 Bogotá (06:17 PM tarde - respaldo)
   workflow_dispatch:
     inputs:
       numero: { description: "Número de bitácora (vacío = las pendientes)", required: false }
@@ -19,6 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - run: pip install openpyxl
@@ -31,14 +37,16 @@ jobs:
           PRUEBA: ${{ github.event.inputs.prueba || 'false' }}
         run: python scripts/generate_and_send.py
       - name: Guardar historial (siempre, para no duplicar)
-        if: always()
+        if: always() && github.event.inputs.dry_run != 'true' && github.event.inputs.prueba != 'true'
         run: |
           git config user.name "bitacora-bot"
           git config user.email "bitacora-bot@users.noreply.github.com"
           git add data/state.json generated
           if ! git diff --cached --quiet; then
             git commit -m "Historial de envíos"
-            for i in 1 2 3; do git pull --rebase && git push && break || sleep 5; done
+            for i in 1 2 3 4; do
+              git pull --rebase --autostash -X ours origin main && git push origin HEAD:main && break || sleep 5
+            done
           fi
       - name: Mantener el cron activo
         if: always()

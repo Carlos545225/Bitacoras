@@ -3,30 +3,217 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Panel de bitácoras</title>
+<title>Panel de bitácoras · Etapa productiva</title>
 <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-<header><h1>Panel de bitácoras · Etapa productiva</h1><p>El envío lo hace GitHub Actions automáticamente; este panel solo muestra el estado.</p></header>
+<header>
+  <div class="header-inner">
+    <div>
+      <h1>Panel de bitácoras · Etapa productiva</h1>
+      <p>Envío automático con GitHub Actions · Parametrización y control en tiempo real</p>
+    </div>
+    <div class="header-actions">
+      <span id="sync-badge" class="pill info">Sincronizando…</span>
+      <button type="button" id="btn-sync" class="btn-secondary">🔄 Actualizar estado</button>
+      <button type="button" id="btn-toggle-cfg" class="btn-primary">⚙️ Parametrizar / Editar</button>
+    </div>
+  </div>
+</header>
+
 <main>
   <div id="err" hidden></div>
+  <div id="toast" hidden></div>
+
   <div class="cards">
     <div class="card"><small>Automatización</small><b id="auto">…</b></div>
     <div class="card"><small>Próximo envío</small><b id="next">…</b></div>
-    <div class="card"><small>Destinatario</small><b id="dest">…</b></div>
+    <div class="card"><small>Destinatario(s)</small><b id="dest">…</b></div>
     <div class="card"><small>Asunto</small><b id="subject">…</b></div>
   </div>
-  <section><h2>Calendario de bitácoras</h2><div class="scroll"><table>
-    <thead><tr><th>N.º</th><th>Mes</th><th>Periodo</th><th>Envío programado</th><th>Estado</th><th></th></tr></thead><tbody id="rows"></tbody></table></div></section>
-  <section><h2>Historial de envíos</h2><div class="scroll"><table>
-    <thead><tr><th>N.º</th><th>Periodo</th><th>Enviado</th><th>Resultado</th><th>Destinatarios</th></tr></thead><tbody id="hist"></tbody></table></div></section>
-  <section><h2>Cómo operar</h2><ol>
-    <li>Cambiar destinatario, asunto, cuerpo, pausar o ajustar fechas: edita <code>data/config.json</code> en GitHub.</li>
-    <li>Probar sin enviar: Actions → Enviar bitacora → Run workflow → marca <i>dry_run</i>.</li>
-    <li>Enviar una prueba a tu propio correo: Run workflow → marca <i>prueba</i>.</li>
-  </ol></section>
+
+  <!-- Panel de Parametrización editable -->
+  <section id="cfg-panel" class="cfg-section" hidden>
+    <div class="sec-head">
+      <h2>⚙️ Parametrización del sistema</h2>
+      <small class="mut">Los cambios quedan guardados en este navegador y, si conectas tu Token de GitHub, se guardan directamente en el repositorio (<code>data/config.json</code>).</small>
+    </div>
+
+    <form id="cfg-form" autocomplete="off">
+      <div class="form-grid">
+        <div class="field">
+          <label for="f-activo">Estado del envío automático</label>
+          <select id="f-activo">
+            <option value="true">🟢 Activa (enviar automáticamente)</option>
+            <option value="false">🔴 Pausada (no enviar hasta reactivar)</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="f-dest">Destinatarios (separados por coma)</label>
+          <input type="text" id="f-dest" placeholder="correo1@ejemplo.com, correo2@ejemplo.com" required>
+        </div>
+
+        <div class="field">
+          <label for="f-cc">Con copia CC (opcional, separados por coma)</label>
+          <input type="text" id="f-cc" placeholder="copia@ejemplo.com">
+        </div>
+
+        <div class="field">
+          <label for="f-hora">Hora programada de envío (Bogotá)</label>
+          <input type="time" id="f-hora" value="00:00" required>
+        </div>
+
+        <div class="field">
+          <label for="f-num-ini">N.º de bitácora inicial</label>
+          <input type="number" id="f-num-ini" min="1" max="999" required>
+        </div>
+
+        <div class="field">
+          <label for="f-anio-ini">Año de inicio</label>
+          <input type="number" id="f-anio-ini" min="2020" max="2100" required>
+        </div>
+
+        <div class="field">
+          <label for="f-mes-ini">Mes de inicio</label>
+          <select id="f-mes-ini">
+            <option value="1">1 - Enero</option>
+            <option value="2">2 - Febrero</option>
+            <option value="3">3 - Marzo</option>
+            <option value="4">4 - Abril</option>
+            <option value="5">5 - Mayo</option>
+            <option value="6">6 - Junio</option>
+            <option value="7">7 - Julio</option>
+            <option value="8">8 - Agosto</option>
+            <option value="9">9 - Septiembre</option>
+            <option value="10">10 - Octubre</option>
+            <option value="11">11 - Noviembre</option>
+            <option value="12">12 - Diciembre</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label for="f-modo">Duración del calendario</label>
+          <select id="f-modo">
+            <option value="eterno">♾️ Continuo (mes a mes indefinidamente)</option>
+            <option value="fijo">🔢 Cantidad fija de bitácoras</option>
+          </select>
+        </div>
+
+        <div class="field" id="wrap-cantidad" hidden>
+          <label for="f-cantidad">Cantidad total de bitácoras</label>
+          <input type="number" id="f-cantidad" min="1" max="120" value="12">
+        </div>
+      </div>
+
+      <div class="field full">
+        <label for="f-asunto">Asunto del correo <small class="mut">(Variables: <code>{numero}</code>, <code>{mes}</code>, <code>{anio}</code>, <code>{desde}</code>, <code>{hasta}</code>)</small></label>
+        <input type="text" id="f-asunto" required>
+      </div>
+
+      <div class="field full">
+        <label for="f-cuerpo">Cuerpo del correo</label>
+        <textarea id="f-cuerpo" rows="6" required></textarea>
+      </div>
+
+      <div class="preview-box">
+        <small>Vista previa del próximo correo:</small>
+        <div id="mail-preview"></div>
+      </div>
+
+      <hr class="sep">
+
+      <div class="form-grid">
+        <div class="field">
+          <label for="f-repo">Repositorio GitHub (<code>usuario/repo</code>)</label>
+          <input type="text" id="f-repo" placeholder="Carlos545225/test">
+        </div>
+        <div class="field">
+          <label for="f-token">Token de GitHub (opcional, para guardar directo en el repo desde aquí)</label>
+          <input type="password" id="f-token" placeholder="ghp_... o github_pat_...">
+          <small class="mut">Se guarda solo en tu navegador (<code>localStorage</code>). <a href="https://github.com/settings/tokens/new?scopes=repo,workflow&description=Panel+Bitacoras" target="_blank" rel="noopener">Crear token aquí</a>.</small>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn-primary">💾 Guardar parametrización</button>
+        <button type="button" id="btn-run-now" class="btn-secondary" title="Dispara el workflow en GitHub Actions">🚀 Enviar pendientes ahora</button>
+        <button type="button" id="btn-run-test" class="btn-secondary" title="Envía una prueba a tu propio Gmail">🧪 Enviar prueba a mi correo</button>
+        <button type="button" id="btn-export-cfg" class="btn-ghost">⬇️ Descargar config.json</button>
+        <button type="button" id="btn-reset-local" class="btn-ghost">↩️ Recargar desde GitHub</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- Modal / Cajón para editar una bitácora puntual -->
+  <section id="ov-panel" class="cfg-section" hidden>
+    <div class="sec-head">
+      <h2 id="ov-title">✏️ Ajustar bitácora</h2>
+      <small class="mut">Personaliza las fechas de esta bitácora o corrige su estado de envío.</small>
+    </div>
+    <form id="ov-form">
+      <input type="hidden" id="ov-num">
+      <div class="form-grid">
+        <div class="field">
+          <label for="ov-desde">Fecha inicio (Desde)</label>
+          <input type="date" id="ov-desde" required>
+        </div>
+        <div class="field">
+          <label for="ov-hasta">Fecha fin / entrega (Hasta)</label>
+          <input type="date" id="ov-hasta" required>
+        </div>
+        <div class="field">
+          <label for="ov-envio">Fecha y hora de envío programado</label>
+          <input type="datetime-local" id="ov-envio" required>
+        </div>
+        <div class="field">
+          <label for="ov-estado-hist">Estado en el historial</label>
+          <select id="ov-estado-hist">
+            <option value="keep">No cambiar historial</option>
+            <option value="enviada">✅ Marcar como Enviada manualmente</option>
+            <option value="pendiente">⏳ Quitar de enviadas (permitir reenvío)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn-primary">💾 Aplicar a esta bitácora</button>
+        <button type="button" id="btn-ov-clear" class="btn-secondary">🔄 Restaurar fechas automáticas</button>
+        <button type="button" id="btn-ov-cancel" class="btn-ghost">Cancelar</button>
+      </div>
+    </form>
+  </section>
+
+  <section>
+    <div class="sec-head-row">
+      <h2>Calendario de bitácoras</h2>
+      <small class="mut">Puedes editar las fechas o el estado de cualquier bitácora con el botón <b>✏️ Editar</b>.</small>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>N.º</th><th>Mes</th><th>Periodo</th><th>Envío programado</th><th>Estado</th><th>Acciones</th></tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>Historial de envíos registrados</h2>
+    <div class="scroll">
+      <table>
+        <thead>
+          <tr><th>N.º</th><th>Periodo</th><th>Enviado</th><th>Resultado</th><th>Destinatarios</th></tr>
+        </thead>
+        <tbody id="hist"></tbody>
+      </table>
+    </div>
+  </section>
 </main>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="js/calendar.js"></script><script src="js/excel.js"></script><script src="js/app.js"></script>
+<script src="js/calendar.js"></script>
+<script src="js/excel.js"></script>
+<script src="js/app.js"></script>
 </body>
 </html>
