@@ -1,7 +1,7 @@
 const $ = s => document.querySelector(s);
 const fileName = b => `Bitacora_${pad(b.numero, 3)}_${MESES[b.mes - 1]}_${b.anio}.xlsx`;
 
-const DEFAULT_REPO = "Carlos545225/test";
+const DEFAULT_REPO = "Carlos545225/Bitacoras";
 const LS_CFG_KEY = "bitacoras_cfg_v2";
 const LS_STATE_KEY = "bitacoras_state_v2";
 const LS_REPO_KEY = "bitacoras_gh_repo";
@@ -45,7 +45,12 @@ const FALLBACK_STATE = {
 let CFG = null, STATE = null, SCHED = [];
 
 function getRepo() {
-  return (localStorage.getItem(LS_REPO_KEY) || DEFAULT_REPO).trim();
+  const saved = (localStorage.getItem(LS_REPO_KEY) || "").trim();
+  if (!saved || saved.toLowerCase() === "carlos545225/test") {
+    localStorage.setItem(LS_REPO_KEY, DEFAULT_REPO);
+    return DEFAULT_REPO;
+  }
+  return saved;
 }
 function getToken() {
   return (localStorage.getItem(LS_TOKEN_KEY) || "").trim();
