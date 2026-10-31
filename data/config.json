@@ -1,0 +1,15 @@
+{
+  "activo": true,
+  "destinatarios": ["Miltonchavez740@gmail.com"],
+  "cc": [],
+  "asunto": "Bitácora de actividades N.º {numero} - {mes} {anio}",
+  "cuerpo": "Cordial saludo.\n\nAdjunto la bitácora de seguimiento de etapa productiva N.º {numero}, correspondiente al periodo del {desde} al {hasta}.\n\nQuedo atento a sus comentarios.\n\nCordialmente,\nSalvatore Chávez Febles\nAprendiz SENA - Ficha 3065561\nTecnólogo en Gestión Administrativa",
+  "calendario": {
+    "numero_inicio": 3,
+    "anio_inicio": 2026,
+    "mes_inicio": 10,
+    "hora_envio": 18,
+    "eterno": true
+  },
+  "ajustes": {}
+}

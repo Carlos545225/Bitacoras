@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel de bitácoras</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header><h1>Panel de bitácoras · Etapa productiva</h1><p>El envío lo hace GitHub Actions automáticamente; este panel solo muestra el estado.</p></header>
+<main>
+  <div id="err" hidden></div>
+  <div class="cards">
+    <div class="card"><small>Automatización</small><b id="auto">…</b></div>
+    <div class="card"><small>Próximo envío</small><b id="next">…</b></div>
+    <div class="card"><small>Destinatario</small><b id="dest">…</b></div>
+    <div class="card"><small>Asunto</small><b id="subject">…</b></div>
+  </div>
+  <section><h2>Calendario de bitácoras</h2><div class="scroll"><table>
+    <thead><tr><th>N.º</th><th>Mes</th><th>Periodo</th><th>Envío programado</th><th>Estado</th><th></th></tr></thead><tbody id="rows"></tbody></table></div></section>
+  <section><h2>Historial de envíos</h2><div class="scroll"><table>
+    <thead><tr><th>N.º</th><th>Periodo</th><th>Enviado</th><th>Resultado</th><th>Destinatarios</th></tr></thead><tbody id="hist"></tbody></table></div></section>
+  <section><h2>Cómo operar</h2><ol>
+    <li>Cambiar destinatario, asunto, cuerpo, pausar o ajustar fechas: edita <code>data/config.json</code> en GitHub.</li>
+    <li>Probar sin enviar: Actions → Enviar bitacora → Run workflow → marca <i>dry_run</i>.</li>
+    <li>Enviar una prueba a tu propio correo: Run workflow → marca <i>prueba</i>.</li>
+  </ol></section>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="js/calendar.js"></script><script src="js/excel.js"></script><script src="js/app.js"></script>
+</body>
+</html>

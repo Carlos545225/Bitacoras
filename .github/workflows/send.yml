@@ -1,0 +1,47 @@
+name: Enviar bitacora
+on:
+  schedule:
+    - cron: "5 23 * * *"   # 18:05 Bogotá
+    - cron: "5 11 * * *"   # 06:05 Bogotá (respaldo por si falla o se retrasa la anterior)
+  workflow_dispatch:
+    inputs:
+      numero: { description: "Número de bitácora (vacío = las pendientes)", required: false }
+      dry_run: { description: "Solo generar y validar, sin enviar", type: boolean, default: false }
+      prueba: { description: "Enviar de prueba a tu propio correo (no se registra)", type: boolean, default: false }
+permissions:
+  contents: write
+  actions: write
+concurrency:
+  group: bitacora-send
+  cancel-in-progress: false
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install openpyxl
+      - name: Generar y enviar
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          NUMERO: ${{ github.event.inputs.numero }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          PRUEBA: ${{ github.event.inputs.prueba || 'false' }}
+        run: python scripts/generate_and_send.py
+      - name: Guardar historial (siempre, para no duplicar)
+        if: always()
+        run: |
+          git config user.name "bitacora-bot"
+          git config user.email "bitacora-bot@users.noreply.github.com"
+          git add data/state.json generated
+          if ! git diff --cached --quiet; then
+            git commit -m "Historial de envíos"
+            for i in 1 2 3; do git pull --rebase && git push && break || sleep 5; done
+          fi
+      - name: Mantener el cron activo
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow enable send.yml || true
