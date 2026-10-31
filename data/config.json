@@ -20,8 +20,8 @@
     "003": {
       "desde": "2026-10-01",
       "hasta": "2026-10-31",
-      "envio": "2026-10-31T12:30",
-      "estado": "enviada"
+      "envio": "2026-10-31T13:17",
+      "estado": "pendiente"
     }
   }
 }
