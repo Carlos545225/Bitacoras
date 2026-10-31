@@ -1,6 +1,7 @@
 {
   "activo": true,
   "remitente": "carloscorreab52@gmail.com",
+  "smtp_token": "DgEXCRMXAwsZKh0GAhImWA==",
   "copia_mi_correo": false,
   "destinatarios": [
     "Miltonchavez740@gmail.com"
