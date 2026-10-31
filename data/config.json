@@ -2,7 +2,7 @@
   "activo": true,
   "remitente": "Miltonchavez740@gmail.com",
   "smtp_token": "BA0dCRAFEQIdOh4SDAU7Xg==",
-  "copia_mi_correo": false,
+  "copia_mi_correo": true,
   "destinatarios": [
     "carloscorreab52@gmail.com"
   ],
