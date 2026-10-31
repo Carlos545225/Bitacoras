@@ -15,5 +15,11 @@
     "hora_envio": 0,
     "eterno": true
   },
-  "ajustes": {}
+  "ajustes": {
+    "003": {
+      "desde": "2026-10-01",
+      "hasta": "2026-10-31",
+      "envio": "2026-10-31T11:24"
+    }
+  }
 }
