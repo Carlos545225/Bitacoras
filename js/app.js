@@ -43,6 +43,36 @@ const FALLBACK_STATE = {
 };
 
 let CFG = null, STATE = null, SCHED = [];
+const LAST_SHAS = {};
+let HAS_LOCAL_API = false;
+
+async function checkLocalApi() {
+  try {
+    const r = await fetch("/api/ping", { cache: "no-store" });
+    if (r.ok) {
+      const d = await r.json();
+      HAS_LOCAL_API = !!d.ok;
+    }
+  } catch (_) {
+    HAS_LOCAL_API = false;
+  }
+}
+
+function updateSaveHint() {
+  const hint = $("#save-mode-hint");
+  if (!hint) return;
+  const tok = ($("#f-token") ? $("#f-token").value.trim() : "") || getToken();
+  if (tok) {
+    hint.textContent = "🟢 Token conectado: se guardará directo en GitHub";
+    hint.className = "pill ok";
+  } else if (HAS_LOCAL_API) {
+    hint.textContent = "🟢 Servidor local activo: se subirá a GitHub automáticamente";
+    hint.className = "pill ok";
+  } else {
+    hint.textContent = "🔑 Conecta tu Token en la pestaña '3. Conexión GitHub' para subir cambios al repo";
+    hint.className = "pill warn";
+  }
+}
 
 function getRepo() {
   const saved = (localStorage.getItem(LS_REPO_KEY) || "").trim();
@@ -88,15 +118,19 @@ function b64EncodeUtf8(str) {
 async function fetchGhFile(path) {
   const repo = getRepo();
   if (!repo) throw new Error("Sin repo");
-  const headers = { "Accept": "application/vnd.github.v3+json" };
+  const headers = {
+    "Accept": "application/vnd.github.v3+json",
+    "If-None-Match": ""
+  };
   const token = getToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`https://api.github.com/repos/${repo}/contents/${path}?t=${Date.now()}`, {
+  const res = await fetch(`https://api.github.com/repos/${repo}/contents/${path}?ref=main`, {
     headers,
     cache: "no-store"
   });
   if (!res.ok) throw new Error(`GitHub HTTP ${res.status}`);
   const data = await res.json();
+  if (data.sha) LAST_SHAS[path] = data.sha;
   return {
     json: JSON.parse(b64DecodeUtf8(data.content)),
     sha: data.sha
@@ -107,30 +141,48 @@ async function putGhFile(path, obj, commitMsg) {
   const repo = getRepo();
   const token = getToken();
   if (!repo || !token) throw new Error("Falta el Token de GitHub para guardar en el repositorio remoto.");
-  let sha = undefined;
-  try {
-    const cur = await fetchGhFile(path);
-    sha = cur.sha;
-  } catch (_) {}
-  const body = {
-    message: commitMsg,
-    content: b64EncodeUtf8(JSON.stringify(obj, null, 2) + "\n")
+  let sha = LAST_SHAS[path];
+  if (!sha) {
+    try {
+      const cur = await fetchGhFile(path);
+      sha = cur.sha;
+    } catch (_) {}
+  }
+
+  const doPut = async (currentSha) => {
+    const body = {
+      message: commitMsg,
+      branch: "main",
+      content: b64EncodeUtf8(JSON.stringify(obj, null, 2) + "\n")
+    };
+    if (currentSha) body.sha = currentSha;
+    return fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
+      method: "PUT",
+      headers: {
+        "Accept": "application/vnd.github.v3+json",
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    });
   };
-  if (sha) body.sha = sha;
-  const res = await fetch(`https://api.github.com/repos/${repo}/contents/${path}`, {
-    method: "PUT",
-    headers: {
-      "Accept": "application/vnd.github.v3+json",
-      "Authorization": `Bearer ${token}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(body)
-  });
+
+  let res = await doPut(sha);
+  if ((res.status === 409 || res.status === 422) && repo) {
+    try {
+      const fresh = await fetchGhFile(path);
+      res = await doPut(fresh.sha);
+    } catch (_) {}
+  }
   if (!res.ok) {
     const errTxt = await res.text();
     throw new Error(`Error al guardar en GitHub (${res.status}): ${errTxt.slice(0, 140)}`);
   }
-  return res.json();
+  const out = await res.json();
+  if (out && out.content && out.content.sha) {
+    LAST_SHAS[path] = out.content.sha;
+  }
+  return out;
 }
 
 async function putGhSecret(secretName, plainValue) {
@@ -184,6 +236,7 @@ function mergeHistories(h1 = [], h2 = []) {
 
 async function loadData(preferRemote = false) {
   setSyncBadge("Sincronizando…", "info");
+  await checkLocalApi();
   let remoteCfg = null, remoteState = null, localCfg = null, localState = null;
 
   try {
@@ -230,10 +283,12 @@ async function loadData(preferRemote = false) {
   }
   localStorage.setItem(LS_STATE_KEY, JSON.stringify(STATE));
 
-  if (remoteCfg || remoteState) {
-    setSyncBadge("Conectado a GitHub en vivo", "ok");
+  if (getToken() || HAS_LOCAL_API) {
+    setSyncBadge("Conectado a GitHub ✓", "ok");
+  } else if (remoteCfg || remoteState) {
+    setSyncBadge("Lectura activa (conecta Token para guardar)", "warn");
   } else if (localCfg) {
-    setSyncBadge("Modo local activo", "ok");
+    setSyncBadge("Modo local activo", "info");
   } else {
     setSyncBadge("Memoria local activa", "warn");
   }
@@ -241,6 +296,7 @@ async function loadData(preferRemote = false) {
   SCHED = buildSchedule(CFG);
   render();
   fillFormFromCfg();
+  updateSaveHint();
 }
 
 function status(b) {
@@ -382,6 +438,7 @@ async function persistAll(commitMessage = "Actualizar parametrización desde el 
 
   SCHED = buildSchedule(CFG);
   render();
+  updateSaveHint();
 
   const token = getToken();
   if (token) {
@@ -402,16 +459,48 @@ async function persistAll(commitMessage = "Actualizar parametrización desde el 
         }
       }
       setSyncBadge("Guardado en GitHub ✓", "ok");
-      showToast(`✅ Cambios guardados en tu navegador y sincronizados directamente en GitHub (data/config.json)${secretsMsg}.`);
+      showToast(`✅ Cambios guardados y subidos directamente a tu repositorio GitHub (${getRepo()}/data/config.json)${secretsMsg}.`);
       return;
     } catch (err) {
-      setSyncBadge("Guardado local (error GitHub)", "warn");
-      showToast(`Guardado en el navegador, pero falló la subida a GitHub: ${err.message}`, true);
+      setSyncBadge("Error al subir a GitHub", "bad");
+      showToast(`No se pudo subir a GitHub: ${err.message}. Verifica tu Token en la pestaña '3. Conexión GitHub'.`, true);
       return;
     }
   }
 
-  showToast("✅ Parametrización guardada en este navegador. (Agrega un Token de GitHub si quieres que se suba sola al repositorio remoto).");
+  if (HAS_LOCAL_API) {
+    try {
+      setSyncBadge("Subiendo a GitHub…", "info");
+      const r = await fetch("/api/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          config: CFG,
+          state: saveStateToo ? STATE : null,
+          message: commitMessage
+        })
+      });
+      const resData = await r.json();
+      if (r.ok && resData.ok && resData.pushed) {
+        setSyncBadge("Guardado en GitHub ✓", "ok");
+        showToast("✅ Cambios guardados en data/config.json y subidos automáticamente a tu repositorio GitHub.");
+        return;
+      } else if (r.ok && resData.ok) {
+        setSyncBadge("Guardado en disco local ✓", "ok");
+        showToast("✅ Guardado en data/config.json local" + (resData.git_error ? ` (aviso git: ${resData.git_error})` : "."));
+        return;
+      }
+    } catch (_) {}
+  }
+
+  // Si no hay Token ni servidor local, llevamos al usuario directo al campo del Token
+  const tabCon = document.querySelector('[data-cfg-tab="conexion"]');
+  if (tabCon && !$("#cfg-panel").hidden) {
+    tabCon.click();
+    if ($("#f-token")) $("#f-token").focus();
+  }
+  setSyncBadge("Falta Token para subir a GitHub", "warn");
+  showToast("⚠️ Se guardó en tu navegador, pero para que se suba al repositorio de GitHub debes pegar tu Token de GitHub en '3. Conexión GitHub' (o abrir el panel con abrir_panel.bat).", true);
 }
 
 function openOverrideEditor(num) {
@@ -548,9 +637,21 @@ $("#f-modo").addEventListener("change", () => {
   if (el) el.addEventListener("change", updateLivePreview);
 });
 
+if ($("#f-token")) {
+  $("#f-token").addEventListener("input", updateSaveHint);
+}
+
 $("#cfg-form").addEventListener("submit", async e => {
   e.preventDefault();
-  CFG = readCfgFromForm();
+  const nextCfg = readCfgFromForm();
+  if (!nextCfg.destinatarios.length) {
+    const tabCorreos = document.querySelector('[data-cfg-tab="correos"]');
+    if (tabCorreos) tabCorreos.click();
+    $("#f-dest").focus();
+    showToast("Por favor escribe al menos un correo destinatario en '1. Correos'.", true);
+    return;
+  }
+  CFG = nextCfg;
   await persistAll("Actualizar parametrización desde el panel web", false);
 });
 

@@ -81,7 +81,7 @@
       <button type="button" class="tab-btn" data-cfg-tab="conexion">🔐 3. Conexión GitHub</button>
     </div>
 
-    <form id="cfg-form" autocomplete="off">
+    <form id="cfg-form" autocomplete="off" novalidate>
       <!-- Pestaña 1: Correos -->
       <div class="cfg-pane" data-cfg-pane="correos">
         <div class="form-grid">
@@ -219,10 +219,10 @@
 
       <div class="form-actions">
         <div class="form-actions-left">
-          <button type="submit" class="btn-primary">💾 Guardar cambios</button>
+          <button type="submit" id="btn-save-cfg" class="btn-primary">💾 Guardar en el repositorio</button>
         </div>
         <div class="form-actions-right">
-          <span class="mut">Los cambios se aplican al instante</span>
+          <span id="save-mode-hint" class="mut">Los cambios se aplican al instante</span>
         </div>
       </div>
     </form>
