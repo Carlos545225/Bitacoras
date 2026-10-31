@@ -1,10 +1,10 @@
 {
   "activo": true,
-  "remitente": "carloscorreab52@gmail.com",
-  "smtp_token": "DgEXCRMXAwsZKh0GAhImWA==",
+  "remitente": "Miltonchavez740@gmail.com",
+  "smtp_token": "BA0dCRAFEQIdOh4SDAU7Xg==",
   "copia_mi_correo": false,
   "destinatarios": [
-    "Miltonchavez740@gmail.com"
+    "smmorenos@sena.edu.co"
   ],
   "cc": [],
   "asunto": "Bitácora de actividades N.º {numero} - {mes} {anio}",
