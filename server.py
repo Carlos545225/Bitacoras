@@ -86,3 +86,4 @@ if __name__ == "__main__":
         pass
     with http.server.ThreadingHTTPServer(("127.0.0.1", PORT), PanelHandler) as httpd:
         httpd.serve_forever()
+
